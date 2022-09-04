@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
+from time import sleep
 import requests
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import traceback
 
 prefix = "https://w.linovelib.com";
 cookies = {
@@ -46,29 +48,41 @@ response = requests.get('https://w.linovelib.com/novel/2552/catalog', cookies=co
 
 def fetch_novel(n_id, book):
     print(f"will fetch {n_id}")
-    resp = requests.get(f'https://w.linovelib.com/novel/{n_id}/catalog',timeout=20, cookies=cookies, headers=headers)
-    doc = etree.HTML(resp.text)
-    # l = doc.xpath('//li[@class="chapter-li jsChapter"]')
-    l = doc.xpath('//ol[@class="chapter-ol chapter-ol-catalog"]/li')
-    with open(book + '.txt', "w") as fp:
-        for i in l:
-            if i.text is not None:
-                print(f"write {i.text}")
-                fp.write(f"\n## {i.text}\n")
+    try:
+        while True:
+            try:
+                resp = requests.get(f'https://w.linovelib.com/novel/{n_id}/catalog',timeout=10, cookies=cookies, headers=headers)
+                break
+            except :
                 continue
-            title = i.xpath("./a/span")[0].text
-            ref = i.xpath("./a")[0].get("href")
-            if not ref.endswith(".html"):
-                last_ref = pend[-1][-1]
-                idx = last_ref.rindex('/')
-                num = int(last_ref[last_ref.rindex('/') + 1:len(last_ref) - 5]) + 1
-                ref = last_ref[:idx] + '/' + str(num) + '.html'
-                print(f"WARN: complete url:{ref} for {title}")
-            data = fetch_chapter(book, title, ref)
-            fp.writelines(data)
-            fp.flush()
-    print(f"{book} finish")
-    return doc
+        doc = etree.HTML(resp.text)
+        # l = doc.xpath('//li[@class="chapter-li jsChapter"]')
+        l = doc.xpath('//ol[@class="chapter-ol chapter-ol-catalog"]/li')
+        count = 0
+        with open(book + '.txt', "w", encoding="utf8") as fp:
+            for i in l:
+                count += 1
+                if i.text is not None:
+                    print(f"write {book}.{i.text}")
+                    fp.write(f"\n## {i.text}\n")
+                    continue
+                title = i.xpath("./a/span")[0].text
+                ref = i.xpath("./a")[0].get("href")
+                if not ref.endswith(".html"):
+                    idx = last_ref.rindex('/')
+                    num = int(last_ref[last_ref.rindex('/') + 1:len(last_ref) - 5]) + 1
+                    ref = last_ref[:idx] + '/' + str(num) + '.html'
+                    print(f"WARN: complete url:{ref} for {title}")
+                data = fetch_chapter(book, title, ref)
+                print(f"{book}: {count}/{len(l)}")
+                fp.writelines(data)
+                fp.flush()
+                last_ref = ref
+        print(f"{book} finish")
+        return doc
+    except Exception as e:
+        print(f"FATEL EEROR {e}")
+        traceback.print_exc()
 
 def fetch_chapter(book, title, ref):
     while True:
@@ -78,10 +92,16 @@ def fetch_chapter(book, title, ref):
             i = 1
             res = ['\n### ' + title + '\n']
             while True:
-                # print(f"{title}_{i}")
-                resp = requests.get(f'{url[:-5]}_{i}.html', timeout=20, cookies=cookies, headers=headers)
+                while True:
+                    try:
+                        print(f"fetching {book}.{title}_{i}")
+                        resp = requests.get(f'{url[:-5]}_{i}.html', timeout=6, cookies=cookies, headers=headers)
+                        break
+                    except :
+                        print(f"MEET EXCEPTION WILL RETRY: {book}.{title}_{i}")
+                        continue
                 doc = etree.HTML(resp.text)
-                l = [i.text.replace('\r', '\n') for i in doc.xpath("//p") if i.text is not None ][:-3]
+                l = [i.text.strip('\r').strip('\n') + '\n' for i in doc.xpath("//p") if i.text is not None ][:-3]
                 res.extend(l)
                 a_list = [i.text for i in doc.xpath("//a")]
                 if not '下一页' in a_list:
@@ -107,6 +127,7 @@ if __name__ == "__main__":
     pool.submit(fetch_novel,"1915", "新约 魔法禁书目录")
     pool.submit(fetch_novel,"104", "最弱无败神装机龙《巴哈姆特》")
     pool.submit(fetch_novel,"824", "魔法禁书目录")
-    pool.shutdown()
+    # pool.shutdown()
+    sleep(100000)
     print("all finish")
 
