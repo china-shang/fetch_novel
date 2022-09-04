@@ -2,6 +2,8 @@
 
 import requests
 from lxml import etree
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 prefix = "https://w.linovelib.com";
 cookies = {
@@ -39,50 +41,72 @@ headers = {
     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36',
 }
 
+response = requests.get('https://w.linovelib.com/novel/2552/catalog', cookies=cookies, headers=headers)
 # response = requests.get('https://w.linovelib.com/novel/2552/93021_2.html', cookies=cookies, headers=headers)
-# response = requests.get('https://w.linovelib.com/novel/2552/catalog', cookies=cookies, headers=headers)
 
-def fetch_novel(n_id):
+def fetch_novel(n_id, book):
     print(f"will fetch {n_id}")
-    resp = requests.get(f'https://w.linovelib.com/novel/{n_id}/catalog', cookies=cookies, headers=headers)
+    resp = requests.get(f'https://w.linovelib.com/novel/{n_id}/catalog',timeout=20, cookies=cookies, headers=headers)
     doc = etree.HTML(resp.text)
-    l = doc.xpath('//li[@class="chapter-li jsChapter"]')
-    pend = []
-    for i in l:
-        title = i.xpath("./a/span")[0].text
-        ref = i.xpath("./a")[0].get("href")
-        if not ref.endswith(".html"):
-            last_ref = pend[-1][-1]
-            idx = last_ref.rindex('/')
-            num = int(last_ref[last_ref.rindex('/') + 1:len(last_ref) - 5]) + 1
-            ref = last_ref[:idx] + '/' + str(num) + '.html'
-            print(f"WARN: complete url:{ref} for {title}")
-
-        pend.append((title, ref))
-    print(pend)
-    for i, j in pend:
-        fetch_chapter(i, j)
+    # l = doc.xpath('//li[@class="chapter-li jsChapter"]')
+    l = doc.xpath('//ol[@class="chapter-ol chapter-ol-catalog"]/li')
+    with open(book + '.txt', "w") as fp:
+        for i in l:
+            if i.text is not None:
+                print(f"write {i.text}")
+                fp.write(f"\n## {i.text}\n")
+                continue
+            title = i.xpath("./a/span")[0].text
+            ref = i.xpath("./a")[0].get("href")
+            if not ref.endswith(".html"):
+                last_ref = pend[-1][-1]
+                idx = last_ref.rindex('/')
+                num = int(last_ref[last_ref.rindex('/') + 1:len(last_ref) - 5]) + 1
+                ref = last_ref[:idx] + '/' + str(num) + '.html'
+                print(f"WARN: complete url:{ref} for {title}")
+            data = fetch_chapter(book, title, ref)
+            fp.writelines(data)
+            fp.flush()
+    print(f"{book} finish")
     return doc
 
-def fetch_chapter(title, ref):
-    print(f'fetching {title}')
-    url = prefix + ref
-    i = 1
-    res = [title + '\n']
+def fetch_chapter(book, title, ref):
     while True:
-        print(f"{title}_{i}")
-        resp = requests.get(f'{url[:-5]}_{i}.html', cookies=cookies, headers=headers)
-        doc = etree.HTML(resp.text)
-        l = [i.text.replace('\r', '\n') for i in doc.xpath("//p") if i.text is not None ][:-3]
-        res.extend(l)
-        a_list = [i.text for i in doc.xpath("//a")]
-        if not '下一页' in a_list:
-            break
-        i = i + 1
-    print(f'fetch {title} success')
-    return res
+        try:
+            print(f'fetching {book}.{title}')
+            url = prefix + ref
+            i = 1
+            res = ['\n### ' + title + '\n']
+            while True:
+                # print(f"{title}_{i}")
+                resp = requests.get(f'{url[:-5]}_{i}.html', timeout=20, cookies=cookies, headers=headers)
+                doc = etree.HTML(resp.text)
+                l = [i.text.replace('\r', '\n') for i in doc.xpath("//p") if i.text is not None ][:-3]
+                res.extend(l)
+                a_list = [i.text for i in doc.xpath("//a")]
+                if not '下一页' in a_list:
+                    break
+                i = i + 1
+            print(f'fetch {book}.{title} success')
+            return res
+        except:
+            print(f"MEET EXCEPTION WILL RETRY: {book}.{title}")
+            pass
 
 if __name__ == "__main__":
-    res = fetch_novel("2552")
-
+    import os
+    os.chdir("C:/Users/win10/Desktop/fetch_novel")
+    print(os.getcwd())
+    pool = ThreadPoolExecutor(max_workers=10)
+    pool.submit(fetch_novel,"2014", "OVERLORD不死之王")
+    pool.submit(fetch_novel,"54", "新妹魔王的契约者")
+    pool.submit(fetch_novel,"71", "平凡职业造就世界最强")
+    pool.submit(fetch_novel,"2356", "魔女之旅")
+    pool.submit(fetch_novel,"1420", "机巧少女不会受伤")
+    pool.submit(fetch_novel,"204", "落第骑士英雄谭")
+    pool.submit(fetch_novel,"1915", "新约 魔法禁书目录")
+    pool.submit(fetch_novel,"104", "最弱无败神装机龙《巴哈姆特》")
+    pool.submit(fetch_novel,"824", "魔法禁书目录")
+    pool.shutdown()
+    print("all finish")
 
