@@ -84,6 +84,59 @@ def fetch_novel(n_id, book):
         print(f"FATEL EEROR {e}")
         traceback.print_exc()
 
+def fetch_novel_multi(n_id, book):
+    print(f"will fetch {n_id}")
+    result = []
+    pool = ThreadPoolExecutor(max_workers=32)
+    try:
+        while True:
+            try:
+                resp = requests.get(f'https://w.linovelib.com/novel/{n_id}/catalog',timeout=10, cookies=cookies, headers=headers)
+                break
+            except :
+                continue
+        doc = etree.HTML(resp.text)
+        # l = doc.xpath('//li[@class="chapter-li jsChapter"]')
+        l = doc.xpath('//ol[@class="chapter-ol chapter-ol-catalog"]/li')
+        count = 0
+        idx = 0
+        for i in l:
+            count += 1
+            if i.text is not None:
+                print(f"write {book}.{i.text}")
+                result.append('')
+                result[idx] = f"\n## {i.text}\n"
+                idx += 1
+                continue
+            title = i.xpath("./a/span")[0].text
+            ref = i.xpath("./a")[0].get("href")
+            if not ref.endswith(".html"):
+                t = last_ref.rindex('/')
+                num = int(last_ref[last_ref.rindex('/') + 1:len(last_ref) - 5]) + 1
+                ref = last_ref[:t] + '/' + str(num) + '.html'
+                print(f"WARN: complete url:{ref} for {title}")
+            print("will submit")
+            result.append('')
+            pool.submit(fetch_chapter_by_multi,book, title, ref, result, idx)
+            idx += 1
+            print(f"{book}: {count}/{len(l)}")
+            last_ref = ref
+
+        pool.shutdown(wait=True)
+        with open(book + '.txt', "w", encoding="utf8") as fp:
+            for data in result:
+                fp.writelines(data)
+                fp.flush()
+        print(f"{book} finish")
+        return doc
+    except Exception as e:
+        print(f"FATEL EEROR {e}")
+        traceback.print_exc()
+
+def fetch_chapter_by_multi(book, title, ref, res, idx):
+    print(f"will fetch {book}.{title}.{idx} by thread" )
+    res[idx] = fetch_chapter(book, title, ref)
+
 def fetch_chapter(book, title, ref):
     while True:
         try:
@@ -118,16 +171,26 @@ if __name__ == "__main__":
     os.chdir("C:/Users/win10/Desktop/fetch_novel")
     print(os.getcwd())
     pool = ThreadPoolExecutor(max_workers=10)
-    pool.submit(fetch_novel,"2014", "OVERLORD不死之王")
-    pool.submit(fetch_novel,"54", "新妹魔王的契约者")
-    pool.submit(fetch_novel,"71", "平凡职业造就世界最强")
-    pool.submit(fetch_novel,"2356", "魔女之旅")
-    pool.submit(fetch_novel,"1420", "机巧少女不会受伤")
-    pool.submit(fetch_novel,"204", "落第骑士英雄谭")
-    pool.submit(fetch_novel,"1915", "新约 魔法禁书目录")
-    pool.submit(fetch_novel,"104", "最弱无败神装机龙《巴哈姆特》")
-    pool.submit(fetch_novel,"824", "魔法禁书目录")
-    # pool.shutdown()
+    pool.submit(fetch_novel_multi,"2552", "魔王学院的不适任者2")
+    # pool.submit(fetch_novel_multi,"1860", "魔法科高中的劣等生")
+    # pool.submit(fetch_novel,"4", "精灵使的剑舞")
+    # pool.submit(fetch_novel,"1892", "噬血狂袭")
+    # pool.submit(fetch_novel,"1375", "灼眼的夏娜")
+    # pool.submit(fetch_novel,"2811", "学园都市")
+    # pool.submit(fetch_novel,"2894", "魔法禁书目录SS 生物黑客篇")
+    # pool.submit(fetch_novel,"2407", "只要长得可爱，即使是变态你也喜欢吗？")
+    # pool.submit(fetch_novel,"23", "我的妹妹哪有这么可爱")
+    # pool.submit(fetch_novel,"2117", "不正经的魔术讲师与禁忌教典")
+    # pool.submit(fetch_novel,"2014", "不正经的魔术讲师与禁忌教典")
+    # pool.submit(fetch_novel,"54", "新妹魔王的契约者")
+    # pool.submit(fetch_novel,"71", "平凡职业造就世界最强")
+    # pool.submit(fetch_novel,"2356", "魔女之旅")
+    # pool.submit(fetch_novel,"1420", "机巧少女不会受伤")
+    # pool.submit(fetch_novel,"204", "落第骑士英雄谭")
+    # pool.submit(fetch_novel,"1915", "新约 魔法禁书目录")
+    # pool.submit(fetch_novel,"104", "最弱无败神装机龙《巴哈姆特》")
+    # pool.submit(fetch_novel,"824", "魔法禁书目录")
     sleep(100000)
+    pool.shutdown(wait=True)
     print("all finish")
 
